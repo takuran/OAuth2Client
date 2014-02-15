@@ -243,11 +243,11 @@ NSString * const NXOAuth2ClientConnectionContextTokenRefresh = @"tokenRefresh";
 
 
 // Web Server Flow only
-- (BOOL)openRedirectURL:(NSURL *)URL;
+- (BOOL)openRedirectURL:(NSURL *)URL configureRedirectURL:(NSURL *)redirectURL
 {
     NSString *accessGrant = [URL nxoauth2_valueForQueryParameterKey:@"code"];
     if (accessGrant) {
-        [self requestTokenWithAuthGrant:accessGrant redirectURL:[URL nxoauth2_URLWithoutQueryString]];
+        [self requestTokenWithAuthGrant:accessGrant redirectURL:redirectURL];
         return YES;
     }
     

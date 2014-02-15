@@ -105,7 +105,8 @@ extern NSString * const NXOAuth2ClientConnectionContextTokenRefresh;
             persistent:(BOOL)shouldPersist
               delegate:(NSObject<NXOAuth2ClientDelegate> *)delegate;
 
-- (BOOL)openRedirectURL:(NSURL *)URL;
+- (BOOL)openRedirectURL:(NSURL *)URL
+   configureRedirectURL:(NSURL *)redirectURL;
 
 
 #pragma mark Authorisation Methods

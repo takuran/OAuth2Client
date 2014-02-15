@@ -367,7 +367,12 @@ NSString * const kNXOAuth2AccountStoreAccountType = @"kNXOAuth2AccountStoreAccou
     
     for (NSString *accountType in accountTypes) {
         NXOAuth2Client *client = [self pendingOAuthClientForAccountType:accountType];
-        if ([client openRedirectURL:fixedRedirectURL]) {
+        NSURL *redirectURL = nil;
+        @synchronized (self.configurations) {
+            NSDictionary *configuration = [self.configurations objectForKey:accountType];
+            redirectURL = [configuration objectForKey:kNXOAuth2AccountStoreConfigurationRedirectURL];
+        }
+        if ([client openRedirectURL:fixedRedirectURL configureRedirectURL:redirectURL]) {
             return YES;
         }
     }
