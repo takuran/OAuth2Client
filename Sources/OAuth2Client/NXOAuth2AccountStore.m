@@ -43,6 +43,7 @@ NSString * const kNXOAuth2AccountStoreConfigurationRedirectURL = @"kNXOAuth2Acco
 NSString * const kNXOAuth2AccountStoreConfigurationScope = @"kNXOAuth2AccountStoreConfigurationScope";
 NSString * const kNXOAuth2AccountStoreConfigurationTokenType = @"kNXOAuth2AccountStoreConfigurationTokenType";
 NSString * const kNXOAuth2AccountStoreConfigurationTokenRequestHTTPMethod = @"kNXOAuth2AccountStoreConfigurationTokenRequestHTTPMethod";
+NSString * const kNXOAuth2AccountStoreConfigurationKeyChainGroup = @"kNXOAuth2AccountStoreConfigurationKeyChainGroup";
 NSString * const kNXOAuth2AccountStoreConfigurationAdditionalAuthenticationParameters = @"kNXOAuth2AccountStoreConfigurationAdditionalAuthenticationParameters";
 
 #pragma mark Account Type
@@ -104,17 +105,17 @@ NSString * const kNXOAuth2AccountStoreAccountType = @"kNXOAuth2AccountStoreAccou
         self.configurations = [NSMutableDictionary dictionary];
         self.trustModeHandler = [NSMutableDictionary dictionary];
         self.trustedCertificatesHandler = [NSMutableDictionary dictionary];
-        
+
         [[NSNotificationCenter defaultCenter] addObserver:self
                                                  selector:@selector(accountDidChangeUserData:)
                                                      name:NXOAuth2AccountDidChangeUserDataNotification
                                                    object:nil];
-        
+
         [[NSNotificationCenter defaultCenter] addObserver:self
                                                  selector:@selector(accountDidChangeAccessToken:)
                                                      name:NXOAuth2AccountDidChangeAccessTokenNotification
                                                    object:nil];
-        
+
         [[NSNotificationCenter defaultCenter] addObserver:self
                                                  selector:@selector(accountDidLoseAccessToken:)
                                                      name:NXOAuth2AccountDidLoseAccessTokenNotification
@@ -180,17 +181,17 @@ NSString * const kNXOAuth2AccountStoreAccountType = @"kNXOAuth2AccountStoreAccou
    withPreparedAuthorizationURLHandler:(NXOAuth2PreparedAuthorizationURLHandler)aPreparedAuthorizationURLHandler;
 {
     NSAssert(aPreparedAuthorizationURLHandler, @"Prepared Authorization Handler must not be nil.");
-    
+
     NXOAuth2Client *client = [self pendingOAuthClientForAccountType:accountType];
-    
+
     NSDictionary *configuration;
     @synchronized (self.configurations) {
         configuration = [self.configurations objectForKey:accountType];
     }
-    
+
     NSURL *redirectURL = [configuration objectForKey:kNXOAuth2AccountStoreConfigurationRedirectURL];
     NSURL *preparedURL = [client authorizationURLWithRedirectURL:redirectURL];
-    
+
     aPreparedAuthorizationURLHandler(preparedURL);
 }
 
@@ -247,6 +248,7 @@ NSString * const kNXOAuth2AccountStoreAccountType = @"kNXOAuth2AccountStoreAccou
    authorizationURL:(NSURL *)anAuthorizationURL
            tokenURL:(NSURL *)aTokenURL
         redirectURL:(NSURL *)aRedirectURL
+      keyChainGroup:(NSString *)aKeyChainGroup
      forAccountType:(NSString *)anAccountType;
 {
     [self setConfiguration:[NSDictionary dictionaryWithObjectsAndKeys:
@@ -255,6 +257,7 @@ NSString * const kNXOAuth2AccountStoreAccountType = @"kNXOAuth2AccountStoreAccou
                             theScope, kNXOAuth2AccountStoreConfigurationScope,
                             anAuthorizationURL, kNXOAuth2AccountStoreConfigurationAuthorizeURL,
                             aTokenURL, kNXOAuth2AccountStoreConfigurationTokenURL,
+                            aKeyChainGroup, kNXOAuth2AccountStoreConfigurationKeyChainGroup,
                             aRedirectURL, kNXOAuth2AccountStoreConfigurationRedirectURL, nil]
             forAccountType:anAccountType];
 }
@@ -265,6 +268,7 @@ NSString * const kNXOAuth2AccountStoreAccountType = @"kNXOAuth2AccountStoreAccou
    authorizationURL:(NSURL *)anAuthorizationURL
            tokenURL:(NSURL *)aTokenURL
         redirectURL:(NSURL *)aRedirectURL
+      keyChainGroup:(NSString *)aKeyChainGroup
           tokenType:(NSString *)aTokenType
      forAccountType:(NSString *)anAccountType;
 {
@@ -275,6 +279,7 @@ NSString * const kNXOAuth2AccountStoreAccountType = @"kNXOAuth2AccountStoreAccou
                             anAuthorizationURL, kNXOAuth2AccountStoreConfigurationAuthorizeURL,
                             aTokenURL, kNXOAuth2AccountStoreConfigurationTokenURL,
                             aTokenType, kNXOAuth2AccountStoreConfigurationTokenType,
+                            aKeyChainGroup, kNXOAuth2AccountStoreConfigurationKeyChainGroup,
                             aRedirectURL, kNXOAuth2AccountStoreConfigurationRedirectURL, nil]
             forAccountType:anAccountType];
 }
@@ -286,7 +291,7 @@ NSString * const kNXOAuth2AccountStoreAccountType = @"kNXOAuth2AccountStoreAccou
     NSAssert1([configuration objectForKey:kNXOAuth2AccountStoreConfigurationSecret], @"Missing OAuth2 client secret for account type '%@'.", accountType);
     NSAssert1([configuration objectForKey:kNXOAuth2AccountStoreConfigurationAuthorizeURL], @"Missing OAuth2 authorize URL for account type '%@'.", accountType);
     NSAssert1([configuration objectForKey:kNXOAuth2AccountStoreConfigurationTokenURL], @"Missing OAuth2 token URL for account type '%@'.", accountType);
-    
+
     @synchronized (self.configurations) {
         [self.configurations setObject:configuration forKey:accountType];
     }
@@ -339,13 +344,13 @@ NSString * const kNXOAuth2AccountStoreAccountType = @"kNXOAuth2AccountStoreAccou
 {
     __block NSURL *fixedRedirectURL = nil;
     NSSet *accountTypes;
-    
+
     @synchronized (self.configurations) {
         accountTypes = [self.configurations keysOfEntriesPassingTest:^(id key, id obj, BOOL *stop) {
             NSDictionary *configuration = obj;
             NSURL *redirectURL = [configuration objectForKey:kNXOAuth2AccountStoreConfigurationRedirectURL];
             if ( [[[aURL absoluteString] lowercaseString] hasPrefix:[[redirectURL absoluteString] lowercaseString]]) {
-                
+
                 // WORKAROUND: The URL which is passed to this method may be lower case also the scheme is registered in camel case. Therefor replace the prefix with the stored redirectURL.
                 if (fixedRedirectURL == nil) {
                     if ([aURL.scheme isEqualToString:redirectURL.scheme]) {
@@ -358,14 +363,14 @@ NSString * const kNXOAuth2AccountStoreAccountType = @"kNXOAuth2AccountStoreAccou
                                                                                                              withString:redirectURL.absoluteString]];
                     }
                 }
-                
+
                 return YES;
             } else {
                 return NO;
             }
         }];
     }
-    
+
     for (NSString *accountType in accountTypes) {
         NXOAuth2Client *client = [self pendingOAuthClientForAccountType:accountType];
         NSURL *redirectURL = nil;
@@ -388,33 +393,38 @@ NSString * const kNXOAuth2AccountStoreAccountType = @"kNXOAuth2AccountStoreAccou
     NXOAuth2Client *client = nil;
     @synchronized (self.pendingOAuthClients) {
         client = [self.pendingOAuthClients objectForKey:accountType];
-        
+
         if (!client) {
             NSDictionary *configuration;
             @synchronized (self.configurations) {
                 configuration = [self.configurations objectForKey:accountType];
             }
-            
+
             NSString *clientID = [configuration objectForKey:kNXOAuth2AccountStoreConfigurationClientID];
             NSString *clientSecret = [configuration objectForKey:kNXOAuth2AccountStoreConfigurationSecret];
             NSSet *scope = [configuration objectForKey:kNXOAuth2AccountStoreConfigurationScope];
             NSURL *authorizeURL = [configuration objectForKey:kNXOAuth2AccountStoreConfigurationAuthorizeURL];
             NSURL *tokenURL = [configuration objectForKey:kNXOAuth2AccountStoreConfigurationTokenURL];
             NSString *tokenType = [configuration objectForKey:kNXOAuth2AccountStoreConfigurationTokenType];
+<<<<<<< HEAD
             NSString *tokenRequestHTTPMethod = [configuration objectForKey:kNXOAuth2AccountStoreConfigurationTokenRequestHTTPMethod];
+=======
+            NSString *keychainGroup = [configuration objectForKey:kNXOAuth2AccountStoreConfigurationKeyChainGroup];
+>>>>>>> 13211ba... Added support for different keychain groups (multi-user)
             NSDictionary *additionalAuthenticationParameters = [configuration objectForKey:kNXOAuth2AccountStoreConfigurationAdditionalAuthenticationParameters];
-            
+
             client = [[NXOAuth2Client alloc] initWithClientID:clientID
                                                  clientSecret:clientSecret
                                                  authorizeURL:authorizeURL
                                                      tokenURL:tokenURL
                                                   accessToken:nil
                                                     tokenType:tokenType
+                                                keyChainGroup:keychainGroup
                                                    persistent:YES
                                                      delegate:self];
-            
+
             client.persistent = NO;
-            
+
             if (tokenRequestHTTPMethod != nil) {
                 client.tokenRequestHTTPMethod = tokenRequestHTTPMethod;
             }
@@ -422,11 +432,11 @@ NSString * const kNXOAuth2AccountStoreAccountType = @"kNXOAuth2AccountStoreAccou
                 NSAssert([additionalAuthenticationParameters isKindOfClass:[NSDictionary class]], @"additionalAuthenticationParameters have to be a NSDictionary");
                 client.additionalAuthenticationParameters = additionalAuthenticationParameters;
             }
-            
+
             if (scope != nil) {
                 client.desiredScope = scope;
             }
-            
+
             [self.pendingOAuthClients setObject:client forKey:accountType];
         }
     }
@@ -455,15 +465,15 @@ NSString * const kNXOAuth2AccountStoreAccountType = @"kNXOAuth2AccountStoreAccou
 - (void)oauthClientNeedsAuthentication:(NXOAuth2Client *)client;
 {
     NSString *accountType = [self accountTypeOfPendingOAuthClient:client];
-    
+
     NSDictionary *configuration;
     @synchronized (self.configurations) {
         configuration = [self.configurations objectForKey:accountType];
     }
-    
+
     NSURL *redirectURL = [configuration objectForKey:kNXOAuth2AccountStoreConfigurationRedirectURL];
     NSURL *preparedURL = [client authorizationURLWithRedirectURL:redirectURL];
-    
+
 #if TARGET_OS_IPHONE
         [[UIApplication sharedApplication] openURL:preparedURL];
 #else
@@ -478,7 +488,7 @@ NSString * const kNXOAuth2AccountStoreAccountType = @"kNXOAuth2AccountStoreAccou
         accountType = [self accountTypeOfPendingOAuthClient:client];
         [self.pendingOAuthClients removeObjectForKey:accountType];
     }
-    
+
     NXOAuth2Account *account = [[NXOAuth2Account alloc] initAccountWithOAuthClient:client accountType:accountType];
     
     [self addAccount:account];
@@ -490,10 +500,10 @@ NSString * const kNXOAuth2AccountStoreAccountType = @"kNXOAuth2AccountStoreAccou
         [self.accountsDict setValue:account forKey:account.identifier];
         [NXOAuth2AccountStore storeAccountsInDefaultKeychain:self.accountsDict];
     }
-    
+
     NSDictionary *userInfo = [NSDictionary dictionaryWithObject:account
                                                          forKey:NXOAuth2AccountStoreNewAccountUserInfoKey];
-    
+
     [[NSNotificationCenter defaultCenter] postNotificationName:NXOAuth2AccountStoreAccountsDidChangeNotification
                                                         object:self
                                                       userInfo:userInfo];
@@ -503,7 +513,7 @@ NSString * const kNXOAuth2AccountStoreAccountType = @"kNXOAuth2AccountStoreAccou
 {
     // This delegate method should never be called because the account store
     // does not act as an delegate for established connections.
-    
+
     // If there is one case that was overlooked, we will remove the oauth
     // client from the list of pending oauth clients as a precaution.
     NSString *accountType;
@@ -520,11 +530,11 @@ NSString * const kNXOAuth2AccountStoreAccountType = @"kNXOAuth2AccountStoreAccou
         accountType = [self accountTypeOfPendingOAuthClient:client];
         [self.pendingOAuthClients removeObjectForKey:accountType];
     }
-    
+
     NSDictionary *userInfo = [NSDictionary dictionaryWithObjectsAndKeys:
                               accountType, kNXOAuth2AccountStoreAccountType,
                               error, NXOAuth2AccountStoreErrorKey, nil];
-    
+
     [[NSNotificationCenter defaultCenter] postNotificationName:NXOAuth2AccountStoreDidFailToRequestAccessNotification
                                                         object:self
                                                       userInfo:userInfo];
@@ -590,7 +600,7 @@ NSString * const kNXOAuth2AccountStoreAccountType = @"kNXOAuth2AccountStoreAccou
 + (NSDictionary *)accountsFromDefaultKeychain;
 {
     NSString *serviceName = [self keychainServiceName];
-    
+
     NSDictionary *result = nil;
     NSDictionary *query = [NSDictionary dictionaryWithObjectsAndKeys:
                            (__bridge NSString *)kSecClassGenericPassword, kSecClass,
@@ -600,21 +610,21 @@ NSString * const kNXOAuth2AccountStoreAccountType = @"kNXOAuth2AccountStoreAccou
     CFTypeRef cfResult = nil;
     OSStatus status = SecItemCopyMatching((__bridge CFDictionaryRef)query, &cfResult);
     result = (__bridge_transfer NSDictionary *)cfResult;
-    
+
     if (status != noErr) {
         NSAssert1(status == errSecItemNotFound, @"Unexpected error while fetching accounts from keychain: %ld", status);
         return nil;
     }
-    
+
     return [NSKeyedUnarchiver unarchiveObjectWithData:[result objectForKey:(__bridge NSString *)kSecAttrGeneric]];
 }
 
 + (void)storeAccountsInDefaultKeychain:(NSDictionary *)accounts;
 {
     [self removeFromDefaultKeychain];
- 
+
     NSString *serviceName = [self keychainServiceName];
-    
+
     NSData *data = [NSKeyedArchiver archivedDataWithRootObject:accounts];
     NSDictionary *query = [NSDictionary dictionaryWithObjectsAndKeys:
                            (__bridge NSString *)kSecClassGenericPassword, kSecClass,
@@ -643,7 +653,7 @@ NSString * const kNXOAuth2AccountStoreAccountType = @"kNXOAuth2AccountStoreAccou
 + (NSDictionary *)accountsFromDefaultKeychain;
 {
     NSString *serviceName = [self keychainServiceName];
-    
+
     SecKeychainItemRef item = nil;
     OSStatus err = SecKeychainFindGenericPassword(NULL,
                                                   strlen([serviceName UTF8String]),
@@ -657,22 +667,22 @@ NSString * const kNXOAuth2AccountStoreAccountType = @"kNXOAuth2AccountStoreAccou
         NSAssert1(err == errSecItemNotFound, @"Unexpected error while fetching accounts from keychain: %d", err);
         return nil;
     }
-    
+
     // from Advanced Mac OS X Programming, ch. 16
     UInt32 length;
     char *password;
     NSData *result = nil;
     SecKeychainAttribute attributes[8];
     SecKeychainAttributeList list;
-    
+
     attributes[0].tag = kSecAccountItemAttr;
     attributes[1].tag = kSecDescriptionItemAttr;
     attributes[2].tag = kSecLabelItemAttr;
     attributes[3].tag = kSecModDateItemAttr;
-    
+
     list.count = 4;
     list.attr = attributes;
-    
+
     err = SecKeychainItemCopyContent(item, NULL, &list, &length, (void **)&password);
     if (err == noErr) {
         if (password != NULL) {
@@ -691,11 +701,11 @@ NSString * const kNXOAuth2AccountStoreAccountType = @"kNXOAuth2AccountStoreAccou
 + (void)storeAccountsInDefaultKeychain:(NSDictionary *)accounts;
 {
     [self removeFromDefaultKeychain];
- 
+
     NSString *serviceName = [self keychainServiceName];
-    
+
     NSData *data = [NSKeyedArchiver archivedDataWithRootObject:accounts];
-    
+
     OSStatus __attribute__((unused))err = SecKeychainAddGenericPassword(NULL,
                                                                         strlen([serviceName UTF8String]),
                                                                         [serviceName UTF8String],
@@ -704,14 +714,14 @@ NSString * const kNXOAuth2AccountStoreAccountType = @"kNXOAuth2AccountStoreAccou
                                                                         [data length],
                                                                         [data bytes],
                                                                         NULL);
-    
+
     NSAssert1(err == noErr, @"Error while storing accounts in keychain: %d", err);
 }
 
 + (void)removeFromDefaultKeychain;
 {
     NSString *serviceName = [self keychainServiceName];
-    
+
     SecKeychainItemRef item = nil;
     OSStatus err = SecKeychainFindGenericPassword(NULL,
                                                   strlen([serviceName UTF8String]),
